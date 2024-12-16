@@ -1,4 +1,5 @@
-import { Client, User, WebhookClient } from "discord.js-selfbot-v13";
+import dedent from "dedent";
+import { Client, DiscordAPIError, User, WebhookClient } from "discord.js-selfbot-v13";
 
 if (!process.env.HONEYPOT_TOKEN) {
     throw new Error("HONEYPOT_TOKEN is not set");
@@ -45,7 +46,7 @@ const clients = tokens.map(token => {
         if (message.channel.type !== 'DM') return;
         if (message.author.id === client.user?.id) return;
 
-        logEvent(client, message.author, "MESSAGE", message.content);
+        logEvent(client, message.author, "MESSAGE", `Sent a message with content: \n\`\`\`\n${message.content}\n\`\`\``);
     });
 
     client.on('relationshipAdd', (userId, shouldNotify) => {
@@ -66,37 +67,85 @@ const clients = tokens.map(token => {
 });
 
 async function logEvent(client: Client, user: User | string, type: 'MESSAGE' | 'RELATIONSHIP', info: string) {
-    if (typeof user === 'string') {
-        user = await client.users.fetch(user);
-    }
-
-    console.log(user.displayName, type, info);
-
-    if (process.env.HONEYPOT_MODE === "DM_NOTIFY") {
-        for (const channelId of notifyChannelIds) {
-            const channel = await client.channels.fetch(channelId);
-            await channel.send({
-                embeds: [{
-                    title: `${user.displayName} has ${info}`,
-                    description: `${user.displayName} has ${info}`,
-                    timestamp: new Date().toISOString(),
-                    color: type === 'RELATIONSHIP' ? 0xFFA500 : 0xFF0000,
-                }]
-            });
+    try {
+        try {
+            if (typeof user === 'string') {
+                user = await client.users.fetch(user);
+            }
+        } catch (e) {
+            console.error("Could not fetch user information:", e);
+            return;
         }
-    } else if (process.env.HONEYPOT_MODE === "WEBHOOK") {
-        for (const url of webhookUrls) {
-            const webhook = new WebhookClient({ url });
-            // Create embed
-            await webhook.send({
-                embeds: [{
-                    title: `${user.displayName} has ${info}`,
-                    description: `${user.displayName} has ${info}`,
-                    timestamp: new Date().toISOString(),
-                    color: type === 'RELATIONSHIP' ? 0xFFA500 : 0xFF0000,
-                }]
-            });
+
+        console.log(`${user.displayName} (${user.id}) has ${type === 'RELATIONSHIP' ? 'added or removed a relationship' : 'sent a message'} to the honeypot ${client.user?.displayName} (${client.user?.id}). **Info:** ${info}`);
+
+        if (process.env.HONEYPOT_MODE === "DM_NOTIFY") {
+            for (const channelId of notifyChannelIds) {
+                let channel;
+                try {
+                    channel = await client.channels.fetch(channelId);
+                } catch (error) {
+
+                    if (error instanceof DiscordAPIError) {
+                        if (error.message === "Unknown Channel") {
+                            console.warn(`ATTENTION: ${client.user?.displayName} (@${client.user?.username}) is not in the channel ${channelId}. Make sure the bot is in the channel and has the correct permissions.`);
+                            continue;
+                        }
+
+                        console.error(`Failed to fetch channel ${channelId}:`, error.message);
+                        continue;
+                    }
+
+                    console.error(`Failed to fetch channel ${channelId}:`, error);
+                    continue;
+                }
+
+                if (!channel) return console.warn(`ATTENTION: ${client.user?.displayName} (@${client.user?.username}) is not in the channel ${channelId}. Make sure the bot is in the channel and has the correct permissions.`);
+                if (!channel.isText()) return console.warn(`ATTENTION: ${client.user?.displayName} (@${client.user?.username}) is in a non-text channel ${channelId}. Make sure the bot is in the channel and has the correct permissions.`);
+
+                // Users cannot send embeds, so we need to send the message as a string
+                const message = dedent`
+                    # USER REPORT: ${user.displayName} (<@${user.id}>)
+                    ## ${type === 'RELATIONSHIP' ? 'Added or Removed a Relationship' : 'Sent a Message'}
+                    ## Honeypot: ${client.user?.displayName} (<@${client.user?.id}>)
+                    ### Info:
+                    ${info}
+                `;
+
+                try {
+                    await channel.send({
+                        content: message,
+                    });
+                } catch (error) {
+                    console.error(`Failed to send message to channel ${channelId}:`, error);
+                }
+            }
+        } else if (process.env.HONEYPOT_MODE === "WEBHOOK") {
+            for (const url of webhookUrls) {
+                const webhook = new WebhookClient({ url });
+                // Create embed
+                try {
+                    await webhook.send({
+                        embeds: [{
+                            title: `User Report: ${user.displayName}`,
+                            description: "A honeypot has detected a user interaction.",
+                            fields: [
+                                { name: "User", value: `${user.displayName} (<@${user.id}>)` },
+                                { name: "Honeypot", value: `${client.user?.displayName} (<@${client.user?.id}>)` },
+                                { name: "Type", value: type === 'RELATIONSHIP' ? 'Added or Removed a Relationship' : 'Sent a Message' },
+                                { name: "Info", value: info },
+                            ],
+                            timestamp: new Date().toISOString(),
+                            color: type === 'RELATIONSHIP' ? 0xFFA500 : 0xFF0000,
+                        }]
+                    });
+                } catch (error) {
+                    console.error(`Failed to send webhook message:`, error);
+                }
+            }
         }
+    } catch (e) {
+        console.error("Error logging event:", e);
     }
 }
 

@@ -46,7 +46,7 @@ const clients = tokens.map(token => {
         if (message.channel.type !== 'DM') return;
         if (message.author.id === client.user?.id) return;
 
-        logEvent(client, message.author, "MESSAGE", `Sent a message with content: \n\`\`\`\n${message.content}\n\`\`\``);
+        logEvent(client, message.author, "MESSAGE", `Message content: \n\`\`\`\n${message.content}\n\`\`\``);
     });
 
     client.on('relationshipAdd', (userId, shouldNotify) => {
@@ -132,7 +132,7 @@ async function logEvent(client: Client, user: User | string, type: 'MESSAGE' | '
                             fields: [
                                 { name: "User", value: `${user.displayName} (<@${user.id}>)` },
                                 { name: "Honeypot", value: `${client.user?.displayName} (<@${client.user?.id}>)` },
-                                { name: "Type", value: type === 'RELATIONSHIP' ? 'Added or Removed a Relationship' : 'Sent a Message' },
+                                { name: "Type", value: type },
                                 { name: "Info", value: info },
                             ],
                             timestamp: new Date().toISOString(),

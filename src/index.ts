@@ -136,8 +136,9 @@ async function logEvent(client: Client, user: User | string, type: 'MESSAGE' | '
                             title: `User Report: ${user.displayName}`,
                             description: "A honeypot has detected a user interaction.",
                             fields: [
-                                { name: "User", value: `${user.displayName} (<@${user.id}>)` },
-                                { name: "Honeypot", value: `${client.user?.displayName} (<@${client.user?.id}>)` },
+                                { name: "User", value: `${user.username} (<@${user.id}>)` },
+                                { name: "User ID", value: user.id },
+                                { name: "Honeypot", value: `${client.user?.username} (<@${client.user?.id}>)` },
                                 { name: "Type", value: type },
                                 { name: "Info", value: info },
                             ],

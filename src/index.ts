@@ -46,7 +46,13 @@ const clients = tokens.map(token => {
         if (message.channel.type !== 'DM') return;
         if (message.author.id === client.user?.id) return;
 
-        logEvent(client, message.author, "MESSAGE", `Message content: \n\`\`\`\n${message.content}\n\`\`\``);
+        if (message.stickers.size > 0) {
+            message.stickers.forEach(sticker => {
+                message.content = message.content + `\n<sticker:${sticker.name}:${sticker.id}:${sticker.url}>`;
+            });
+        }
+
+        logEvent(client, message.author, "MESSAGE", `Message content: \n\`\`\`\n${message.content.substring(0, 980)}\n\`\`\``);
     });
 
     client.on('relationshipAdd', (userId, shouldNotify) => {
